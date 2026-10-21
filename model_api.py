@@ -192,6 +192,7 @@ if __name__ == "__main__":
     else:
         print("WARNING: LSTM model NOT loaded -> using fallback score.")
         print("Reason:", load_error)
-    server = HTTPServer(("127.0.0.1", 5000), Handler)
-    print("Model API running at http://127.0.0.1:5000")
+    import os
+    server = HTTPServer(("0.0.0.0", int(os.environ.get("PORT", 5000))), Handler)
+    print(f"Model API running on port {os.environ.get('PORT', 5000)}")
     server.serve_forever()
