@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MedWatch ICU — The ward, as heat</title>
+<meta name="description" content="MedWatch ICU maps every ICU patient by LSTM deterioration risk. The closer to the centre, the sooner they need you.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='16' fill='%2307070f'/%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%23f2effc' stroke-width='2' stroke-dasharray='48 15'/%3E%3Ccircle cx='16' cy='16' r='3.2' fill='%23ff4438'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+<script src="vendor/chart.umd.js"></script>
+</head>
+<body>
+<div class="grain" aria-hidden="true"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4.5" width="4.2" height="15" rx="1"/><rect x="13.8" y="4.5" width="4.2" height="15" rx="1"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.5-4.2L3 9"/><path d="M3 4v5h5"/><path d="M4 13a8 8 0 0 0 14.5 4.2L21 15"/><path d="M21 20v-5h-5"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
+</defs></svg>
+
+<!-- ============ BOOT / LOGIN ============ -->
+<div id="page-login" class="boot">
+  <canvas id="boot-field" aria-hidden="true"></canvas>
+  <svg class="boot-line" viewBox="0 0 1200 180" preserveAspectRatio="none" aria-hidden="true">
+    <path pathLength="1" d="M0 90 H440 L462 90 L474 80 L486 90 L506 90 L516 24 L532 164 L546 90 L570 90 L590 68 L612 90 H1200"/>
+  </svg>
+  <div class="boot-ripple" aria-hidden="true"></div>
+
+  <div class="boot-left">
+    <h1 class="boot-word" aria-label="MedWatch"><span style="--i:0">M</span><span style="--i:1">e</span><span style="--i:2">d</span><span style="--i:3">W</span><span style="--i:4">a</span><span style="--i:5">t</span><span style="--i:6">c</span><span style="--i:7">h</span></h1>
+    <p class="boot-tag">Know which bed needs you next. The closer to the centre, the sooner.</p>
+  </div>
+
+  <div class="boot-right">
+    <form class="boot-form" onsubmit="login(event);return false">
+      <h2>Sign in</h2>
+      <p class="lead">Use your hospital account to open the ward.</p>
+      <div class="field"><label for="role-select">Role</label>
+        <select class="control" id="role-select"><option>Doctor</option><option>Nurse</option><option>Admin</option></select></div>
+      <div class="field"><label for="login-email">Email</label>
+        <input class="control" id="login-email" type="email" autocomplete="username" placeholder="doctor@hospital.com" value="doctor@hospital.com"></div>
+      <div class="field"><label for="login-pass">Password</label>
+        <input class="control" id="login-pass" type="password" autocomplete="current-password" placeholder="Your password" value="password123"></div>
+      <button class="btn-bone" id="login-btn" type="submit">Enter the ward</button>
+      <p class="boot-foot">Demo hospital · Not for clinical use · v2.1</p>
+    </form>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app" class="app" hidden>
+  <header class="bar">
+    <div class="brand">
+      <svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="13" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="62 20" stroke-linecap="round" transform="rotate(-70 17 17)"/><circle cx="17" cy="17" r="5.2" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".5"/><circle cx="17" cy="17" r="2.6" fill="#ff4438"><animate attributeName="r" values="2.6;3.6;2.6" dur="1.2s" repeatCount="indefinite"/></circle></svg>
+      <span class="brand-name">MedWatch</span>
+    </div>
+    <nav class="nav" id="nav" aria-label="Main">
+      <button class="active" data-view="ward" onclick="showView('ward')">Ward</button>
+      <button data-view="patients" onclick="showView('patients')">Patients</button>
+      <button data-view="alerts" onclick="showView('alerts')">Alerts</button>
+      <button data-view="insights" onclick="showView('insights')">Insights</button>
+      <button data-view="settings" onclick="showView('settings')">Settings</button>
+      <span class="nav-dot" id="nav-dot"></span>
+    </nav>
+    <div class="bar-right">
+      <div class="edited-chip" id="edited-chip" hidden><span class="chip-av" id="topbar-editor-avatar"></span><span id="topbar-editor-name"></span></div>
+      <div class="pill" id="model-status" data-state="off" title="Model API status"><i></i><span class="pill-t" id="model-status-text">Checking model</span></div>
+      <span class="clock"><span id="live-clock">--:--:--</span> IST</span>
+      <button class="icon-btn" id="refresh-btn" onclick="refreshModelPredictions()" aria-label="Refresh model predictions" title="Refresh predictions"><svg class="i"><use href="#i-refresh"/></svg></button>
+      <button class="icon-btn" onclick="logout()" aria-label="Log out" title="Log out"><svg class="i"><use href="#i-logout"/></svg></button>
+    </div>
+  </header>
+
+  <div class="stage-area">
+
+    <!-- WARD -->
+    <section id="page-ward" class="view v-ward active">
+      <div class="ward">
+        <div class="stage" id="stage">
+          <canvas id="radar" aria-label="Ward radar. Each dot is a patient; closer to the centre means higher LSTM risk. Use the priority list for keyboard access." role="img"></canvas>
+          <div class="stage-title"><h1>Ward radar</h1><p>Each dot is a patient. Closer to the centre means higher LSTM risk. Inside the red core, distance shows rank.</p></div>
+          <button class="alarm-chip" id="alarm-chip" hidden></button>
+        </div>
+        <div class="scrub">
+          <button class="play" id="play-btn" onclick="togglePlay()" aria-label="Replay the last 24 readings"><svg class="i" id="play-icon"><use href="#i-play"/></svg></button>
+          <div class="scrub-track" id="scrub-track" role="slider" tabindex="0" aria-label="Reading time" aria-valuemin="0" aria-valuemax="23" aria-valuenow="23">
+            <canvas id="scrub-spark" aria-hidden="true"></canvas><div class="scrub-thumb" id="scrub-thumb"></div>
+          </div>
+          <div class="scrub-read"><span class="num" id="scrub-label">Now</span><small>Drag or press play to replay 24 readings</small></div>
+        </div>
+        <aside class="side">
+          <div class="census">
+            <div><span class="num t-hot" id="c-high">0</span><small>High risk</small></div>
+            <div><span class="num t-amber" id="c-med">0</span><small>Medium</small></div>
+            <div><span class="num t-cold" id="c-low">0</span><small>Stable</small></div>
+            <div class="census-note"><span id="c-total">0</span> patients in ICU · high above 0.65, medium 0.35 to 0.65</div>
+          </div>
+          <div class="queue">
+            <h2>Needs attention first</h2><p>Ranked by LSTM score at the selected time.</p>
+            <div id="queue-list"></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- PATIENTS -->
+    <section id="page-patients" class="view">
+      <div class="page">
+        <div class="page-head"><h1>Patients</h1><p id="patients-sub"></p></div>
+        <div class="toolbar">
+          <label class="search"><span class="sr-only">Search patients</span><svg class="i"><use href="#i-search"/></svg><input type="text" id="patient-search" placeholder="Search by patient ID or age" oninput="filterPatients()"></label>
+          <div class="chips" id="patient-filters">
+            <button class="chip active" data-filter="all" onclick="setFilter('all',this)">All <span id="fc-all"></span></button>
+            <button class="chip c-hot" data-filter="high" onclick="setFilter('high',this)">High risk <span id="fc-high"></span></button>
+            <button class="chip c-amber" data-filter="med" onclick="setFilter('med',this)">Medium <span id="fc-med"></span></button>
+            <button class="chip c-cold" data-filter="low" onclick="setFilter('low',this)">Stable <span id="fc-low"></span></button>
+          </div>
+          <select class="select" id="patient-sort" onchange="filterPatients()" aria-label="Sort patients">
+            <option value="lstm-desc">Risk, high to low</option><option value="lstm-asc">Risk, low to high</option><option value="age-desc">Age, oldest first</option><option value="hr-desc">Heart rate, highest first</option><option value="id">Patient ID</option>
+          </select>
+          <div class="segmented" role="group" aria-label="View">
+            <button class="active" id="view-list-btn" onclick="setPatientsView('list',this)">List</button>
+            <button id="view-beds-btn" onclick="setPatientsView('beds',this)">Beds</button>
+          </div>
+        </div>
+        <div class="plist-scroll" id="patients-list-wrap"><div>
+          <div class="plist-head"><span>Patient</span><span>Age / sex</span><span>Ward · bed</span><span>HR</span><span>SpO<sub>2</sub></span><span>BP</span><span>Temp</span><span>Risk trend</span><span></span><span style="text-align:right">LSTM</span></div>
+          <div id="patients-list"></div>
+        </div></div>
+        <div id="patients-beds" class="beds-wrap" hidden></div>
+      </div>
+    </section>
+
+    <!-- ALERTS -->
+    <section id="page-alerts" class="view">
+      <div class="page">
+        <div class="page-head"><h1>Alerts</h1><p>Patients above the warning threshold, most recently raised first. Time is how long the LSTM score has stayed above 0.35.</p></div>
+        <div class="toolbar"><div class="chips">
+          <button class="chip active" onclick="setAlertFilter('all',this)">All <span id="ac-all"></span></button>
+          <button class="chip c-hot" onclick="setAlertFilter('critical',this)">Critical, above 0.70 <span id="ac-crit"></span></button>
+          <button class="chip c-amber" onclick="setAlertFilter('warning',this)">Warning, 0.35 to 0.70 <span id="ac-warn"></span></button>
+        </div></div>
+        <div class="tl" id="alerts-list"></div>
+      </div>
+    </section>
+
+    <!-- INSIGHTS -->
+    <section id="page-insights" class="view">
+      <div class="page">
+        <div class="page-head"><h1>Insights</h1><p id="insights-sub"></p></div>
+        <div class="kpis">
+          <div class="kpi"><small>Average heart rate</small><span class="num" id="kpi-hr">0</span><span class="u">bpm, population mean</span></div>
+          <div class="kpi"><small>Average SpO<sub>2</sub></small><span class="num" id="kpi-spo2">0</span><span class="u">percent, target above 95</span></div>
+          <div class="kpi"><small>Average LSTM score</small><span class="num" id="kpi-lstm">0</span><span class="u">population risk index</span></div>
+          <div class="kpi"><small>Average temperature</small><span class="num" id="kpi-temp">0</span><span class="u">°C, threshold 38.5</span></div>
+        </div>
+        <div class="perf">
+          <div class="perf-head"><h2>How the model performs</h2><p id="perf-sub"></p></div>
+          <div class="perf-grid">
+            <div class="perf-nums">
+              <div><span class="num" id="perf-auc">0</span><small>ROC-AUC</small></div>
+              <div><span class="num" id="perf-acc">0</span><small>Accuracy</small></div>
+              <div><span class="num" id="perf-rec">0</span><small>High-risk recall</small></div>
+              <div><span class="num" id="perf-prec">0</span><small>High-risk precision</small></div>
+            </div>
+            <div class="chart-block"><div class="chart-box" style="height:280px"><canvas id="chart-roc"></canvas></div></div>
+            <div class="chart-block"><h3>Confusion matrix</h3><p>Every held-out sequence, counted by what the model said and what really happened.</p><div class="cm" id="perf-cm"></div><p class="perf-base" id="perf-base"></p></div>
+          </div>
+        </div>
+        <div class="charts">
+          <div class="chart-block cb-7"><h3>How risk is distributed</h3><p>Patients per 0.1 band of LSTM score.</p><div class="chart-box"><canvas id="chart-risk-dist"></canvas></div></div>
+          <div class="chart-block cb-5"><h3>Risk breakdown</h3><p>Share of patients in each level.</p><div class="chart-box"><canvas id="chart-pie"></canvas></div></div>
+          <div class="chart-block cb-5"><h3>Risk by ward</h3><p>Average LSTM score per ward. Wider means riskier.</p><div class="chart-box"><canvas id="chart-wards"></canvas></div></div>
+          <div class="chart-block cb-7"><h3>Average risk by age group</h3><p>Mean LSTM score for each age band.</p><div class="chart-box"><canvas id="chart-age"></canvas></div></div>
+          <div class="chart-block cb-4"><h3>Gender split</h3><p>Male and female patients.</p><div class="chart-box"><canvas id="chart-gender"></canvas></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="page-settings" class="view">
+      <div class="page">
+        <div class="page-head"><h1>Settings</h1><p>Configure MedWatch preferences.</p></div>
+        <div class="set">
+          <div>
+            <div class="set-sec"><h3>Profile</h3><p>Manage your account details.</p>
+              <div class="set-row"><div class="set-label">Full name</div><input class="set-input" value="Dr. D. Sharma" id="prof-name" aria-label="Full name"></div>
+              <div class="set-row"><div class="set-label">Email address</div><input class="set-input" value="doctor@hospital.com" aria-label="Email address"></div>
+              <div class="set-row"><div class="set-label">Role</div><select class="select" id="prof-role" aria-label="Role"><option selected>Doctor</option><option>Nurse</option><option>Admin</option><option>Resident</option></select></div>
+              <div class="set-row"><div class="set-label">Department</div><select class="select" aria-label="Department"><option selected>ICU Ward 3</option><option>ICU Ward 1</option><option>ICU Ward 2</option><option>PICU</option></select></div>
+              <button class="btn-bone sm" onclick="saveProfile()">Save changes</button>
+            </div>
+            <div class="set-sec"><h3>Alert thresholds</h3><p>Choose when the system raises critical and warning alerts.</p>
+              <div class="set-row"><div><div class="set-label">Critical LSTM threshold</div><div class="set-hint">Above this raises a critical alert</div></div><input class="set-input" value="0.70" style="width:100px" aria-label="Critical LSTM threshold"></div>
+              <div class="set-row"><div><div class="set-label">Warning LSTM threshold</div><div class="set-hint">Above this raises a warning</div></div><input class="set-input" value="0.35" style="width:100px" aria-label="Warning LSTM threshold"></div>
+              <div class="set-row"><div><div class="set-label">SpO<sub>2</sub> critical below</div><div class="set-hint">Raises an immediate alert</div></div><input class="set-input" value="88%" style="width:100px" aria-label="SpO2 critical threshold"></div>
+              <div class="set-row"><div><div class="set-label">Audio alerts</div><div class="set-hint">Play a sound on critical events</div></div><button class="switch on" role="switch" aria-checked="true" aria-label="Audio alerts" onclick="sw(this)"></button></div>
+              <div class="set-row"><div><div class="set-label">SMS notifications</div><div class="set-hint">Text the on-call doctor</div></div><button class="switch" role="switch" aria-checked="false" aria-label="SMS notifications" onclick="sw(this)"></button></div>
+              <button class="btn-bone sm" onclick="showToast('Alert configuration saved')">Save thresholds</button>
+            </div>
+          </div>
+          <div>
+            <div class="set-sec"><h3>Edited by</h3><p>Choose who is credited for edits to patient records and configuration.</p>
+              <div class="set-row"><div><div class="set-label">Assigned editor</div><div class="set-hint">All changes are attributed to this person</div></div>
+                <div class="dd">
+                  <button class="dd-btn" id="editor-dropdown-trigger" onclick="toggleEditorDropdown()" aria-haspopup="listbox"><span class="chip-av" id="selected-editor-avatar" style="background:#4a6fd0">DS</span><span id="selected-editor-name">Dr. D. Sharma</span><svg class="i"><use href="#i-chevron"/></svg></button>
+                  <div class="dd-menu" id="editor-dropdown-menu" hidden>
+                    <div class="dd-search"><input type="text" placeholder="Search staff" id="editor-search-input" oninput="filterEditorOptions()" onclick="event.stopPropagation()" aria-label="Search staff"></div>
+                    <div class="dd-div"></div><div id="editor-options-list"></div>
+                  </div>
+                </div></div>
+              <div class="set-row"><div><div class="set-label">Last edit</div><div class="set-hint">Shown in the top bar</div></div><div class="mono" style="color:var(--text-3)" id="last-edit-ts">None yet</div></div>
+              <div class="edit-hist" id="edit-history-list"></div>
+              <div class="set-row"><div class="set-label">Override for patient</div><input class="set-input" placeholder="e.g. P-001" id="override-patient-id" style="width:120px" aria-label="Patient ID"></div>
+              <div class="set-row"><div class="set-label">Override editor</div><select class="select" id="override-editor-select" aria-label="Override editor"></select></div>
+              <button class="btn-bone sm" onclick="applyOverride()">Apply override</button>
+            </div>
+            <div class="set-sec"><h3>Display</h3><p>Change how the ward is shown.</p>
+              <div class="set-row"><div><div class="set-label">Calm mode</div><div class="set-hint">Stops the radar sweep, pulses and transitions</div></div><button class="switch" id="sw-calm" role="switch" aria-checked="false" aria-label="Calm mode" onclick="sw(this);setCalm(this.classList.contains('on'))"></button></div>
+              <div class="set-row"><div><div class="set-label">Compact lists</div><div class="set-hint">Reduce row padding in the patient list</div></div><button class="switch" role="switch" aria-checked="false" aria-label="Compact lists" onclick="sw(this);document.body.classList.toggle('compact',this.classList.contains('on'))"></button></div>
+              <div class="set-row"><div><div class="set-label">Show risk trends</div><div class="set-hint">Mini trend lines in the patient list</div></div><button class="switch on" role="switch" aria-checked="true" aria-label="Show risk trends" onclick="sw(this);document.body.classList.toggle('no-spark',!this.classList.contains('on'))"></button></div>
+            </div>
+            <div class="set-sec"><h3>System</h3><p>Hospital, data source and model.</p>
+              <div class="set-row"><div class="set-label">Hospital name</div><input class="set-input" value="Demo hospital" aria-label="Hospital name"></div>
+              <div class="set-row"><div class="set-label">Data refresh rate</div><select class="select" aria-label="Data refresh rate"><option>30 seconds</option><option selected>1 minute</option><option>5 minutes</option></select></div>
+              <div class="set-row"><div><div class="set-label">LSTM model version</div><div class="set-hint">Current deployed model</div></div><span class="mono" style="color:var(--text-3)">v3.2.1 · 2025-01-10</span></div>
+              <div class="set-row"><div><div class="set-label">Model API</div><div class="set-hint" id="sys-model-hint">http://127.0.0.1:5000</div></div><span class="mono" style="color:var(--text-3)" id="sys-model-status">Checking</span></div>
+              <div class="set-row"><div><div class="set-label">Debug mode</div><div class="set-hint">Show raw model outputs</div></div><button class="switch" role="switch" aria-checked="false" aria-label="Debug mode" onclick="sw(this)"></button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ============ PATIENT DOSSIER ============ -->
+<div id="dossier" class="dossier" role="dialog" aria-modal="true" aria-label="Patient detail" aria-hidden="true">
+  <div class="dz">
+    <div class="dz-top"><button class="close" onclick="closeDossier()"><svg class="i"><use href="#i-close"/></svg>Close</button><span class="pill" style="border-color:transparent;color:var(--text-3)">Press Esc to close</span></div>
+    <div class="dz-grid">
+      <div class="dz-figure dz-in" style="--d:1"><svg id="body-svg" viewBox="0 0 600 590" role="img" aria-label="Body systems under stress"></svg><div class="sys-list" id="sys-list"></div></div>
+      <div class="dz-main">
+        <div class="dz-head dz-in" style="--d:0">
+          <div><div class="pt-id" id="dz-id">P-000</div><div class="pt-meta" id="dz-meta"></div></div>
+          <div class="gauge" id="dz-gauge"></div>
+        </div>
+        <div class="ecg-band dz-in" style="--d:2">
+          <span class="ecg-lbl">ECG II and pleth, simulated from heart rate</span>
+          <div class="ecg-tag"><span class="num" id="dz-hr">0</span><small>beats per minute</small></div>
+          <canvas id="mon-ecg" aria-hidden="true"></canvas><canvas id="mon-pleth" aria-hidden="true"></canvas>
+        </div>
+        <div class="dz-vitals dz-in" id="dz-vitals" style="--d:3"></div>
+        <div class="blk dz-in" style="--d:4"><h3>Risk horizon</h3><p id="risk-sub">LSTM score over the last 24 readings. Above 0.65 is high risk.</p><div class="chart-box"><canvas id="chart-lstm"></canvas></div></div>
+        <div class="blk dz-in" style="--d:5"><h3>Trends</h3>
+          <div class="tabs" id="trend-tabs">
+            <button class="chip active" data-k="hr" onclick="showTrend('hr',this)">Heart rate</button>
+            <button class="chip" data-k="spo2" onclick="showTrend('spo2',this)">SpO<sub>2</sub></button>
+            <button class="chip" data-k="bp" onclick="showTrend('bp',this)">Blood pressure</button>
+            <button class="chip" data-k="lab" onclick="showTrend('lab',this)">Lactate and WBC</button>
+            <button class="chip" data-k="tr" onclick="showTrend('tr',this)">Temperature and breathing</button>
+          </div>
+          <div class="chart-box"><canvas id="chart-trend"></canvas></div></div>
+        <div class="blk dz-in" style="--d:6"><h3 style="margin-bottom:12px">Lab values</h3><div class="labs" id="dz-labs"></div></div>
+        <div class="blk dz-in" style="--d:7"><h3 style="margin-bottom:14px">What changed</h3><p class="note" id="dz-notes" style="margin:0"></p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tip" id="tip" aria-hidden="true"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="data/icu-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
