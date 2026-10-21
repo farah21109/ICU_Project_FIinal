@@ -59,3 +59,4 @@ Other causes: Python 3.13 or newer (TensorFlow may not support it yet, use Pytho
 - The model is very confident (96 patients score about 0.9999), so inside the red core of the radar, distance from the centre shows rank, not exact score. The 0.35 and 0.65 rings are exact. Scores of 0.995 and above are shown as "0.99+".
 - The site's "high risk" band is above 0.65. The metrics above use the notebook's 0.5 threshold.
 - To rebuild the data after retraining: `python prepare_data.py`.
+# ICU_Project_FIinal
