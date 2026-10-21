@@ -39,6 +39,6 @@ http
       res.end(data);
     });
   })
-  .listen(port, "127.0.0.1", () => {
-    console.log(`MedWatch ICU website running at http://127.0.0.1:${port}`);
+  .listen(port, "0.0.0.0", () => {
+    console.log(`MedWatch ICU website running on port ${port}`);
   });
