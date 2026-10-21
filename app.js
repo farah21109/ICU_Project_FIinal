@@ -51,8 +51,8 @@ function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; le
 
 const DATA = window.ICU_DATA;
 const WARDS = 8, STEPS = DATA.steps;
-const MODEL_API_URL = 'http://127.0.0.1:5000/predict';
-const MODEL_HEALTH_URL = 'http://127.0.0.1:5000/health';
+const MODEL_API_URL = 'https://icu-model-api.onrender.com/predict';
+const MODEL_HEALTH_URL = 'https://icu-model-api.onrender.com/health';
 const lastOf = a => a[a.length - 1];
 function carryBack(arr) { // readings before the model had 10 hours of history have no score: show the first real one
   const first = arr.find(v => v !== null); return arr.map(v => v === null ? first : v);
@@ -143,7 +143,7 @@ async function checkModelHealth() {
     const r = await fetch(MODEL_HEALTH_URL, { cache: 'no-store', signal: AbortSignal.timeout(6000) }), j = await r.json();
     if (j.model_loaded) { state = 'live'; label = 'LSTM model live'; detail = 'Running · LSTM loaded'; }
     else { state = 'fallback'; label = 'Fallback scoring'; detail = 'Running · fallback score'; }
-    pill.title = j.message || 'Model API is running'; if (hint) hint.textContent = j.message || 'http://127.0.0.1:5000';
+    pill.title = j.message || 'Model API is running'; if (hint) hint.textContent = j.message || 'https://icu-model-api.onrender.com';
   } catch (e) { pill.title = 'Start the model API with: python model_api.py'; if (hint) hint.textContent = 'Not reachable. Start it with: python model_api.py'; }
   pill.dataset.state = state; txt.textContent = label; if (sys) sys.textContent = detail;
   // The API can take 15-60 s to load TensorFlow, so keep checking until it is live.
