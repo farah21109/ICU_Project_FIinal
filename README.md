@@ -175,6 +175,4 @@ After retraining the model, run `python prepare_data.py` to refresh the site's d
 
 TensorFlow/Keras, scikit-learn, pandas, Python, Node.js, vanilla JavaScript, Chart.js, Render, and the Anybody, Instrument Sans and JetBrains Mono fonts.
 
-## Team
 
-[Add your name and your teammates' names, and what each of you built.]
